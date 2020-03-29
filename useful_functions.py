@@ -18,7 +18,7 @@ from sklearn.compose import ColumnTransformer
 def load_transform_split(fpath='data/ALL_YEARS_ADDED_FEATURES.csv',
                          target='rate', expand=False, split=0.1, clean=True,
                          drop_feats=['SCHOOL_YEAR','DIV_NAME','SCH_NAME','DIPLOMA_RATE'],
-                         fmt='numpy',return_pipeline=False):
+                         fmt='numpy',return_pipeline=False,random_state=None):
     '''
     Convenience function for preparing the graduation data for machine learning!
     
@@ -95,13 +95,13 @@ def load_transform_split(fpath='data/ALL_YEARS_ADDED_FEATURES.csv',
         y = df[[target]]
         X = df.drop([target],axis=1)
         if splitting:        #Split Train/Test
-            X_train,X_test,y_train,y_test = train_test_split(X,y,test_size=split)
+            X_train,X_test,y_train,y_test = train_test_split(X,y,test_size=split,random_state=random_state)
         else:                #No Train/Test
             X_train,y_train = X,y
     else:                  #No X,y
         X = df
         if splitting:        #Split Train/Test
-            X_train,X_test = train_test_split(X,test_size=split)
+            X_train,X_test = train_test_split(X,test_size=split,random_state=random_state)
         else:                #No Train/Test
             X_train = X
     
