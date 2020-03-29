@@ -44,7 +44,12 @@ def load_transform_split(fpath='data/ALL_YEARS_ADDED_FEATURES.csv',
         return_pipeline - Boolean wether or not to return the pipeline used for cleaning. If clean=False,
                            None will be returned if return_pipeline=True.
       OUTPUTS:
-        idk my bff jill.
+        1, 2, 3, 4, or 5 of the following (depending on what you ask for):
+          X_train  - Training data
+          X_test   - Testing data
+          y_train  - Training labels
+          y_test   - Testing labels
+          pipeline - Pipeline used to clean X_train and X_test.
     '''
     
     ### Load ###
@@ -232,3 +237,60 @@ def make_pipeline(X,cat_thresh=10):
 ################################################################################
 ###########################  Plotting Functions  ###############################
 ################################################################################
+
+def color_scatter(x,y,colorby=None,ax=None,reverse=False,**kwargs):
+    #Define default plotting arguments
+    plot_kwargs = {
+        'color':'orange',
+        'cmap':'cividis_r',
+        'alpha':0.3,
+    }
+    #Update defaults with user-provided arguments
+    plot_kwargs.update(kwargs)
+    
+    #Make axes if none were given.
+    if ax is None:
+        fig,ax=plt.subplots()
+    
+    #Determine sort and color based on inputs provided.
+    if colorby is None:
+        sort = np.arange(y_test.shape[0]).astype(int)
+        color = plot_kwargs['color']
+    else:
+        r = 1.
+        if reverse: r = -1
+        sort = np.argsort(r*colorby)
+        color = colorby[sort]
+    del plot_kwargs['color']
+    
+    #Make scatter plot!
+    scat = ax.scatter(x[sort],y[sort],c=color,**plot_kwargs)
+    
+    if len(color) == len(x):
+        cbar = ax.figure.colorbar(scat,ax=ax)
+    else:
+        cbar = None
+    
+    return ax,cbar
+
+def scatter_resid(y,y_pred,colorby=None):
+    #Plot (y_pred - y_test) as a function of y_test
+    resid = y_pred - y
+    ax,cbar = color_scatter(y,resid,colorby=colorby)
+    ax.set_xlim(min(y),max(y))
+    ax.set_xlabel('Actual')
+    ax.set_ylabel('Predicted - Actual')
+    cbar.ax.set_ylabel('COHORT_CNT')
+
+def scatter_predvreal(y,y_pred,colorby=None):
+    #Plot (y_pred - y_test) as a function of y_test
+    resid = y_pred - y
+    ax,cbar = color_scatter(y,y_pred,colorby=colorby)
+    ymi = np.min(y)
+    yma = np.max(y)
+    ax.plot([ymi,yma],[ymi,yma],color='black',ls='--')
+    #ax.axvline(0.5*(ymi+yma),color='black',ls='--')
+    ax.set_xlim(ymi,yma)
+    ax.set_xlabel('Actual')
+    ax.set_ylabel('Predicted')
+    cbar.ax.set_ylabel('COHORT_CNT')
