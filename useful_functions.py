@@ -44,7 +44,7 @@ def load_transform_split(fpath='data/ALL_YEARS_ADDED_FEATURES.csv',
         return_pipeline - Boolean wether or not to return the pipeline used for cleaning. If clean=False,
                            None will be returned if return_pipeline=True.
       OUTPUTS:
-        1, 2, 3, 4, or 5 of the following (depending on what you ask for):
+        Some combo of the following (depending on what you ask for):
           X_train  - Training data
           X_test   - Testing data
           y_train  - Training labels
@@ -113,14 +113,31 @@ def load_transform_split(fpath='data/ALL_YEARS_ADDED_FEATURES.csv',
         if splitting: X_test = pipeline_util(X_test, pipeline=pipeline,fmt=fmt)
     
     
-    ### Output Format ###
-    # Do l8r
+    ### Format of Output ###
+    def correct_format(Z,fmt):
+        if fmt == 'numpy':
+            if isinstance(Z,np.ndarray):
+                return Z #Already correct format
+            elif isinstance(Z,pd.DataFrame):
+                return Z.to_numpy()
+            else:
+                raise TypeError("Something's gone terribly wrong. Unrecognized data format, %s"%(type(Z)))
+        elif fmt == 'pandas':
+            if isinstance(Z,np.ndarray):
+                return pd.DataFrame(Z)
+            elif isinstance(Z,pd.DataFrame):
+                return Z #Already correct format
+            else:
+                raise TypeError("Something's gone terribly wrong. Unrecognized data format, %s"%(type(Z)))
+        else:
+            raise ValueError("Invalid type %s, please select on of: 'numpy', 'pandas'."%(fmt))
     
     ### Return! ###
-    returns = [X_train]
-    if splitting: returns.append(X_test)
-    if not target is None: returns.append(y_train)
-    if splitting and not target is None: returns.append(y_test)
+    returns = []
+    returns.append(correct_format(X_train,fmt))
+    if splitting: returns.append(correct_format(X_test,fmt))
+    if not target is None: returns.append(correct_format(y_train,fmt))
+    if splitting and not target is None: returns.append(correct_format(y_test,fmt))
     if return_pipeline: returns.append(pipeline)
         
     if len(returns) > 1:
