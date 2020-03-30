@@ -76,7 +76,7 @@ def load_transform_split(fpath='data/ALL_YEARS_ADDED_FEATURES.csv',
         pass #Handled in splitting step.
         
     #Raise errors if input can't be used.
-    elif target == 'DROPOUT' and expand:
+    elif target == 'DROPOUT' and not expand:
         raise ValueError("Cannot use boolean dropout with 'expand=False.'"+\
                          "If you are certain you want to \nexpand rows (may take long),"+\
                          "rerun command with 'expand=True'")
@@ -111,6 +111,8 @@ def load_transform_split(fpath='data/ALL_YEARS_ADDED_FEATURES.csv',
         pipeline = pipeline_util(X_train,clean=False,return_pipeline=True)
         X_train = pipeline_util(X_train,pipeline=pipeline,fmt=fmt)
         if splitting: X_test = pipeline_util(X_test, pipeline=pipeline,fmt=fmt)
+    else:
+        pipeline = None
     
     
     ### Format of Output ###
