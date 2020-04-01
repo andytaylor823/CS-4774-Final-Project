@@ -6,6 +6,7 @@ import tensorflow as tf
 from tensorflow import keras
 
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import get_scorer
 from sklearn.preprocessing import OrdinalEncoder, OneHotEncoder, StandardScaler
 from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
@@ -313,3 +314,41 @@ def scatter_predvreal(y,y_pred,colorby=None):
     ax.set_xlabel('Actual')
     ax.set_ylabel('Predicted')
     cbar.ax.set_ylabel('COHORT_CNT')
+
+################################################################################
+##############################  Miscellaneous  #################################
+################################################################################
+
+def get_metric(scoring):
+    try:
+        metric = get_scorer(scoring)
+    except (KeyError, ValueError) as e:
+        try:
+            scorer = get_scorer('neg_'+scoring)
+            metric = lambda *args,**kwargs: -scorer(*args,**kwargs)
+        except (KeyError, ValueError) as e:
+            try:
+                scorer = get_scorer(scoring[4:])
+                metric = lambda *args,**kwargs: -scorer(*args,**kwargs)
+            except KeyError:
+                raise ValueError("Unrecognized sklearn metric")
+    return metric
+
+def preserve_state(func):
+    # Decorator to prevent a function from affecting 
+    #  the numpy random seed outside of its scope.
+    def wrapper(*args,**kwargs):
+        state = np.random.get_state() #Store the random state before function call.
+        ret = func(*args,**kwargs)    #Call function.
+        np.random.set_state(state)    #Revert numpy to random state from before function call.
+        return ret
+    return wrapper
+
+class simple_progress:
+    def __init__(self):
+        self.longest = 0
+    def update(self,message):
+        print(self.longest*" ",end="\r") #Erase previous message.
+        print(message,end="\r")          #Print message
+        if len(message) > self.longest:  #Update longest message length.
+            self.longest = len(message)
