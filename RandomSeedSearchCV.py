@@ -109,3 +109,47 @@ def RandomSeedSearchCV(random_model_maker,X_train,y_train,N=50,
     sort = np.argsort(cv_scores)
     return np.c_[seeds[sort],cv_scores[sort],train_metric[sort],valid_metric[sort],times[sort]]
 
+################################################################################
+###########################  Random Model-Makers  ##############################
+################################################################################
+
+#RandomForestRegressor random model maker.
+def randomseed_rfr_maker(seed,
+         ne_lo=20, ne_hi=200,               # (1) n_estimators
+         md_lo =3, md_hi =15, md_Pnone=0.5, # (2) max_depth
+         mss_lo=2, mss_hi=50,               # (3) min_samples_split
+         msl_lo=2, msl_hi=25,               # (4) min_samples_leaf
+         mf_lo =3, mf_hi =15, mf_Pnone=0.3, # (5) max_features
+         mid_lo=0.,mid_hi=0.4,              # (6) min_impurity_decrease
+         n_jobs=4):
+    
+    #Set random seed.
+    np.random.seed(seed)
+    
+    # Randomly draw parameters and store in kwargs dictionary.
+    kwargs = {}
+    # (1) Draw n_estimators
+    kwargs['n_estimators'] = np.random.randint(ne_lo,ne_hi)
+    # (2) Draw max_depth
+    if np.random.uniform() < md_Pnone:
+        kwargs['max_depth'] = None
+    else:
+        kwargs['max_depth'] = np.random.randint(md_lo,md_hi)
+    # (3) Draw min_samples_split
+    kwargs['min_samples_split'] = np.random.randint(mss_lo,mss_hi)
+    # (3) Draw min_samples_leaf
+    kwargs['min_samples_leaf'] = np.random.randint(msl_lo,msl_hi)
+    # (5) Draw max_features
+    if np.random.uniform() < mf_Pnone:
+        kwargs['max_features'] = None
+    else:
+        kwargs['max_features'] = np.random.randint(mf_lo,mf_hi)
+    # (6) Draw min_impurity_decrease
+    kwargs['min_impurity_decrease'] = np.random.uniform(mid_lo,mid_hi)
+    #Set n_jobs
+    kwargs['n_jobs'] = n_jobs
+    
+    #Create the model!
+    model = RandomForestRegressor(**kwargs)
+    
+    return model
