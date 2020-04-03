@@ -258,7 +258,7 @@ def make_pipeline(X,cat_thresh=10):
 ###########################  Plotting Functions  ###############################
 ################################################################################
 
-def color_scatter(x,y,colorby=None,ax=None,reverse=False,**kwargs):
+def color_scatter(x,y,colorby=None,ax=None,reverse=False,sortabs=False,**kwargs):
     #Define default plotting arguments
     plot_kwargs = {
         'color':'orange',
@@ -274,12 +274,17 @@ def color_scatter(x,y,colorby=None,ax=None,reverse=False,**kwargs):
     
     #Determine sort and color based on inputs provided.
     if colorby is None:
-        sort = np.arange(y_test.shape[0]).astype(int)
+        sort = np.arange(y.shape[0]).astype(int)
         color = plot_kwargs['color']
     else:
         r = 1.
         if reverse: r = -1
-        sort = np.argsort(r*colorby)
+        if sortabs:
+            sort = np.argsort(r*np.abs(colorby))
+            print("ABS")
+        else:
+            #sort = np.argsort(r*colorby)
+            sort = np.argsort(r*np.abs(colorby))
         color = colorby[sort]
     del plot_kwargs['color']
     
