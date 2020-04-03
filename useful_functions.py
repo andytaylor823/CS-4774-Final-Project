@@ -17,7 +17,7 @@ from sklearn.compose import ColumnTransformer
 ################################################################################
 
 def load_transform_split(fpath='data/ALL_YEARS_ADDED_FEATURES.csv',
-                         target='rate', expand=False, split=0.1, clean=True,
+                         target='DROPOUT_N', expand=False, split=0.1, clean=True,
                          drop_feats=['SCHOOL_YEAR','DIV_NAME','SCH_NAME','DIPLOMA_RATE'],
                          fmt='numpy',return_pipeline=False,random_state=None):
     '''
@@ -263,7 +263,7 @@ def color_scatter(x,y,colorby=None,ax=None,reverse=False,sortabs=False,colorbar=
     plot_kwargs = {
         'color':'orange',
         'cmap':'cividis_r',
-        'alpha':0.3,
+        'alpha':1.0,
     }
     #Update defaults with user-provided arguments
     plot_kwargs.update(kwargs)
@@ -281,10 +281,8 @@ def color_scatter(x,y,colorby=None,ax=None,reverse=False,sortabs=False,colorbar=
         if reverse: r = -1
         if sortabs:
             sort = np.argsort(r*np.abs(colorby))
-            print("ABS")
         else:
-            #sort = np.argsort(r*colorby)
-            sort = np.argsort(r*np.abs(colorby))
+            sort = np.argsort(r*colorby)
         color = colorby[sort]
     del plot_kwargs['color']
     
@@ -300,6 +298,86 @@ def color_scatter(x,y,colorby=None,ax=None,reverse=False,sortabs=False,colorbar=
         cbar = None
     
     return ax,cbar
+
+def plot_performance(model,name,X_train,X_test,y_train,y_test,
+                     ax=None,refit=False,rmse='calc',
+                     colorbar=True,cax=None,cmap='coolwarm',
+                     vmin=-15,vmax=15,legend=True,fs=20,
+                     random_state=42,**kwargs):
+
+    #Make axes is necessary
+    if ax is None:
+        fig,ax=plt.subplots(figsize=(10,7))
+
+    #Load data without pipeline to get un-scaled cohort counts for colorbar.
+    tra,tes  = load_transform_split(target=None,
+                                    expand=False,
+                                    clean=False,
+                                    split=0.2,
+                                    return_pipeline=False,
+                                    fmt='pandas',
+                                    random_state=random_state)
+    COHORT_CNT_tes = tes['COHORT_CNT'].to_numpy()
+    COHORT_CNT_tra = tra['COHORT_CNT'].to_numpy()
+
+    #If you asked for it, retrain model with provided data.
+    if refit and not y_train is None:
+        model.fit(X_train,y_train)
+
+    #Plot True DROPOUT_N values with pretty "danger zone" triangle.
+    _plot_performance_helper(ax,**kwargs)
+
+    #Plot training predictions for DROPOUT_N.
+    ytra_pred = model.predict(X_train).flatten()
+    ax,cbar = color_scatter(COHORT_CNT_tra,ytra_pred,colorby=None,color='gray',label='Training Predictions',ax=ax,**kwargs)
+
+    #Plot testing predictions for DROPOUT_N.
+    ytes_pred = model.predict(X_test).flatten()
+    ytes_error = (ytes_pred-y_test)
+    ax,cbar = color_scatter(COHORT_CNT_tes,ytes_pred,colorby=ytes_error,
+                            cmap=cmap,ax=ax,vmin=vmin,vmax=vmax,
+                            sortabs=True,label='Testing Predictions',colorbar=colorbar,cax=cax)
+
+    #Set labels, tick fontsizes, and limits.
+    ax.set_xlabel('Cohort Size',fontsize=fs)
+    ax.set_ylabel('N$_{drop}$ (students)',fontsize=fs)
+    if colorbar:
+        cbar.ax.set_ylabel('Prediction Error (students)',fontsize=fs)
+        for tlab in cbar.ax.get_yticklabels():
+            tlab.set_fontsize(fs)
+    for tlab in ax.get_xticklabels()+ax.get_yticklabels():
+        tlab.set_fontsize(fs)
+    ax.set_xlim(0,250)
+    ax.set_ylim(0,100)
+    
+    #Get RMSE and label with model name and RMSE.
+    if rmse == 'calc':
+        calc_mse = get_metric('mean_squared_error')
+        rmse = np.sqrt(calc_mse(model,X_test,y_test))
+    ax.text(240,95,"%s\n RMSE = %.2f"%(name,rmse),fontsize=fs,horizontalalignment='right',verticalalignment='top')
+
+    #Add legend if requested.
+    if legend:
+        ax.legend(loc=(0.50,0.6),fontsize=fs-3,frameon=False)
+    
+    #Done! Return axes in case user wants to do something else with it.
+    return ax
+
+def _plot_performance_helper(ax, **kwargs):
+
+    #Get COHORT_CNT and DROPOUT_N for all data.
+    X,DROPOUT_N = load_transform_split(split=False,target='DROPOUT_N',clean=False,fmt='pandas')
+    DROPOUT_N = DROPOUT_N.to_numpy()
+    COHORT_CNT = X['COHORT_CNT'].to_numpy()
+
+    #Scatter plot DROPOUT_N vs
+    ax,cbar = color_scatter(COHORT_CNT,DROPOUT_N,colorby=None,color='lightgray',label='Actual',ax=ax,zorder=0,**kwargs)
+
+    #Plot "danger-zone" triangle (Dropout rate > 100%)
+    tri = plt.Polygon([[0,0],[0,200],[200,201.5]], color='whitesmoke',zorder=0)
+    ax.add_patch(tri)
+    ax.plot([0,250],[0,250],ls='--',color='gray',zorder=0) # <- dashed line boarder for triangle.
+    return ax
 
 def scatter_resid(y,y_pred,colorby=None):
     #Plot (y_pred - y_test) as a function of y_test
@@ -360,3 +438,4 @@ class simple_progress:
         print(message,end="\r")          #Print message
         if len(message) > self.longest:  #Update longest message length.
             self.longest = len(message)
+
