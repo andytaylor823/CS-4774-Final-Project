@@ -258,7 +258,7 @@ def make_pipeline(X,cat_thresh=10):
 ###########################  Plotting Functions  ###############################
 ################################################################################
 
-def color_scatter(x,y,colorby=None,ax=None,reverse=False,sortabs=False,**kwargs):
+def color_scatter(x,y,colorby=None,ax=None,reverse=False,sortabs=False,colorbar=True,cax=None,**kwargs):
     #Define default plotting arguments
     plot_kwargs = {
         'color':'orange',
@@ -291,8 +291,11 @@ def color_scatter(x,y,colorby=None,ax=None,reverse=False,sortabs=False,**kwargs)
     #Make scatter plot!
     scat = ax.scatter(x[sort],y[sort],c=color,**plot_kwargs)
     
-    if len(color) == len(x):
-        cbar = ax.figure.colorbar(scat,ax=ax)
+    if colorbar and len(color) == len(x):
+        if cax is None:
+            cbar = ax.figure.colorbar(scat,ax=ax)
+        else:
+            cbar = ax.figure.colorbar(scat,cax=cax)
     else:
         cbar = None
     
