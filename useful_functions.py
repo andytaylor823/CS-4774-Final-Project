@@ -320,6 +320,10 @@ def plot_performance(model,name,X_train,X_test,y_train,y_test,
     COHORT_CNT_tes = tes['COHORT_CNT'].to_numpy()
     COHORT_CNT_tra = tra['COHORT_CNT'].to_numpy()
 
+    #Make sure y is flat.
+    y_train = y_train.flatten()
+    y_test = y_test.flatten()
+
     #If you asked for it, retrain model with provided data.
     if refit and not y_train is None:
         model.fit(X_train,y_train)
