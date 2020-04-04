@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import time
 
 import tensorflow as tf
 from tensorflow import keras
@@ -59,6 +60,15 @@ def load_transform_split(fpath='data/ALL_YEARS_ADDED_FEATURES.csv',
     #Get rid of any nonsense points.
     keep = (df['DROPOUT_RATE'] >= 0) & (df['DROPOUT_RATE'] <= 100)
     df = df[keep]
+
+    ### Expand ###
+    # Do l8r
+    if expand:
+        if target=='DROPOUT':
+            df = expand_table(df,taget='number')
+        else:
+            df = expand_table(df)
+
     #Drop unwanted features.
     if not drop_feats is None: df = df.drop(drop_feats,axis=1)
     
@@ -83,23 +93,17 @@ def load_transform_split(fpath='data/ALL_YEARS_ADDED_FEATURES.csv',
                          "rerun command with 'expand=True'")
     else:
         raise ValueError("Unrecognized value of target, %s."%(target))
-        
-    ### Expand ###
-    # Do l8r
-    if expand:
-        pass #Add l8r
-
     
     ### Split ###
     splitting = not (split is None or split==False or split==0 or split==1)
-    if not target is None: #Split X,y
+    if not target is None:   #Split X,y
         y = df[[target]]
         X = df.drop([target],axis=1)
         if splitting:        #Split Train/Test
             X_train,X_test,y_train,y_test = train_test_split(X,y,test_size=split,random_state=random_state)
         else:                #No Train/Test
             X_train,y_train = X,y
-    else:                  #No X,y
+    else:                    #No X,y
         X = df
         if splitting:        #Split Train/Test
             X_train,X_test = train_test_split(X,test_size=split,random_state=random_state)
@@ -146,6 +150,50 @@ def load_transform_split(fpath='data/ALL_YEARS_ADDED_FEATURES.csv',
     if len(returns) > 1:
         return tuple(returns)
     return returns[0]
+
+def expand_table(df,target=None,nrows='all',progress=True):
+    new_df = None
+    t = time.time()
+    if nrows == 'all':
+        nrows = df.shape[0]
+    if progress: status = simple_progress()
+    for i in range(nrows):
+        if progress: status.update('Row %d / %d'%(i+1,nrows))
+        N_cohort = df.iloc[i]['COHORT_CNT']
+        if target =='number':
+            #Count up students dropping out, graduating, or otherwise
+            N_drop   = np.round((df.iloc[i]['DROPOUT_RATE']/100)*N_cohort).astype(int)
+            N_grad   = np.round((df.iloc[i]['DIPLOMA_RATE']/100)*N_cohort).astype(int)
+            N_else   = N_cohort - N_drop - N_grad
+            
+            try:
+                #Sanity check
+                assert N_else >= 0
+            except AssertionError:
+                raise ValueError("Something has gone terribly wrong. Inconsistent diploma/dropout rates.")
+
+            #Make a template row without dropout/diploma rates and with true/false instead.
+            row_orig = df.iloc[i:(i+1)].copy()
+            row_orig.drop(['DROPOUT_RATE','DIPLOMA_RATE'],axis=1)
+            row_orig['DROP'] = 0
+            row_orig['GRAD'] = 0
+            
+            #Make template dropout row and template graduate row.
+            row_drop = row_orig.copy()
+            row_drop['DROP'] = 1
+            row_grad = row_orig.copy()
+            row_grad['GRAD'] = 1
+            
+            #Make mini-table with the number of dropouts, grads, and otherwise.
+            row_expanded = pd.concat( N_drop*[row_drop] + N_grad*[row_grad] + N_else*[row_orig] )
+        else:
+            row_orig = df.iloc[i:(i+1)].copy()
+            row_expanded = pd.concat( N_cohort*[row_orig] )
+        #Append mini-table to the full, expanded table.
+        new_df = pd.concat([new_df,row_expanded])
+        
+    print((time.time()-t),'seconds')
+    return new_df
 
 def pipeline_util(X,pipeline=None,
                   clean=True,
@@ -310,10 +358,11 @@ def plot_performance(model,name,X_train,X_test,y_train,y_test,
         fig,ax=plt.subplots(figsize=(10,7))
 
     #Load data without pipeline to get un-scaled cohort counts for colorbar.
+    split = X_test.shape[0]/(X_train.shape[0]+X_test.shape[0])
     tra,tes  = load_transform_split(target=None,
                                     expand=False,
                                     clean=False,
-                                    split=0.2,
+                                    split=split,
                                     return_pipeline=False,
                                     fmt='pandas',
                                     random_state=random_state)
