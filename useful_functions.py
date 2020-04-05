@@ -18,7 +18,7 @@ from sklearn.compose import ColumnTransformer
 ################################################################################
 
 def load_transform_split(fpath='data/ALL_YEARS_ADDED_FEATURES.csv',
-                         target='DROPOUT_N', expand=False, split=0.1, clean=True,
+                         target='DROPOUT_N', expand=False, split=0.1, clean=True,weight=None,
                          drop_feats=['SCHOOL_YEAR','DIV_NAME','SCH_NAME','DIPLOMA_RATE'],
                          fmt='numpy',return_pipeline=False,random_state=None):
     '''
@@ -94,21 +94,26 @@ def load_transform_split(fpath='data/ALL_YEARS_ADDED_FEATURES.csv',
     else:
         raise ValueError("Unrecognized value of target, %s."%(target))
     
-    ### Split ###
-    splitting = not (split is None or split==False or split==0 or split==1)
-    if not target is None:   #Split X,y
-        y = df[[target]]
+    ### Get weights ###
+    if not weight is None: w = df[weight].astype(float)
+
+    ### Splitting ###
+
+    if not target is None: #Split X,y
+        y = df[target]
         X = df.drop([target],axis=1)
-        if splitting:        #Split Train/Test
-            X_train,X_test,y_train,y_test = train_test_split(X,y,test_size=split,random_state=random_state)
-        else:                #No Train/Test
-            X_train,y_train = X,y
-    else:                    #No X,y
+    else:                  #No X,y
         X = df
-        if splitting:        #Split Train/Test
-            X_train,X_test = train_test_split(X,test_size=split,random_state=random_state)
-        else:                #No Train/Test
-            X_train = X
+
+    splitting = not (split is None or split==False or split==0 or split==1)
+    if splitting:        #Split Train/Test
+        X_train,X_test = train_test_split(X,test_size=split,random_state=random_state)
+        if not target is None: y_train,y_test = train_test_split(y,test_size=split,random_state=random_state)
+        if not weight is None: w_train,w_test = train_test_split(w,test_size=split,random_state=random_state)
+    else:                #No Train/Test
+        X_train = X
+        if not target is None: y_train = y
+        if not weight is None: w_train = w
     
     
     ### Pipeline ###
@@ -125,14 +130,14 @@ def load_transform_split(fpath='data/ALL_YEARS_ADDED_FEATURES.csv',
         if fmt == 'numpy':
             if isinstance(Z,np.ndarray):
                 return Z #Already correct format
-            elif isinstance(Z,pd.DataFrame):
+            elif isinstance(Z,pd.DataFrame) or isinstance(Z,pd.core.series.Series):
                 return Z.to_numpy()
             else:
                 raise TypeError("Something's gone terribly wrong. Unrecognized data format, %s"%(type(Z)))
         elif fmt == 'pandas':
             if isinstance(Z,np.ndarray):
                 return pd.DataFrame(Z)
-            elif isinstance(Z,pd.DataFrame):
+            elif isinstance(Z,pd.DataFrame) or isinstance(Z,pd.core.series.Series):
                 return Z #Already correct format
             else:
                 raise TypeError("Something's gone terribly wrong. Unrecognized data format, %s"%(type(Z)))
@@ -145,6 +150,8 @@ def load_transform_split(fpath='data/ALL_YEARS_ADDED_FEATURES.csv',
     if splitting: returns.append(correct_format(X_test,fmt))
     if not target is None: returns.append(correct_format(y_train,fmt))
     if splitting and not target is None: returns.append(correct_format(y_test,fmt))
+    if not weight is None: returns.append(correct_format(w_train,fmt))
+    if splitting and not weight is None: returns.append(correct_format(w_test,fmt))
     if return_pipeline: returns.append(pipeline)
         
     if len(returns) > 1:
