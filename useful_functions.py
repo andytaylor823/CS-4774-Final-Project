@@ -6,7 +6,7 @@ import time
 import tensorflow as tf
 from tensorflow import keras
 
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, StratifiedShuffleSplit
 from sklearn.metrics import get_scorer
 from sklearn.preprocessing import OrdinalEncoder, OneHotEncoder, StandardScaler
 from sklearn.pipeline import Pipeline
@@ -18,7 +18,7 @@ from sklearn.compose import ColumnTransformer
 ################################################################################
 
 def load_transform_split(fpath='data/ALL_YEARS_ADDED_FEATURES.csv',
-                         target='DROPOUT_N', expand=False, split=0.1, clean=True,weight=None,
+                         target='DROPOUT_N', weight=None, split=0.1, stratsplit=None,clean=True,expand=False, 
                          drop_feats=['SCHOOL_YEAR','DIV_NAME','SCH_NAME','DIPLOMA_RATE'],
                          fmt='numpy',return_pipeline=False,random_state=None):
     '''
@@ -38,6 +38,10 @@ def load_transform_split(fpath='data/ALL_YEARS_ADDED_FEATURES.csv',
                       Default False
         split      - Fraction of data to split off into testing set. If 0, 1, None, or False are given,
                       data will not be split.
+        stratsplit - Column to use for stratified splitting. ## Currently not working ##
+                      If None or False if provided, stratified splitting is not performed.
+                      If True is provided, target variable is used to perform stratified splitting.
+                      If Column name is provided, that column is used to perform stratified splitting.
         clean      - Boolean whether or not to run data through a pipeline with 
                       StandardScaler and OneHot/OrdinalEncoder.
         drop_feats - Features to throw out.
@@ -72,7 +76,6 @@ def load_transform_split(fpath='data/ALL_YEARS_ADDED_FEATURES.csv',
     #Drop unwanted features.
     if not drop_feats is None: df = df.drop(drop_feats,axis=1)
     
-    
     ### Transform ###
     
     #Parse user input for predict and expand.
@@ -105,16 +108,30 @@ def load_transform_split(fpath='data/ALL_YEARS_ADDED_FEATURES.csv',
     else:                  #No X,y
         X = df
 
+    if stratsplit is None or stratsplit == False:
+        def split_func(Z, test_size=split,random_state=random_state):
+            return train_test_split(Z,test_size=split,random_state=random_state)
+    else:
+        if stratsplit == True:
+            strat = y.to_numpy()
+        else:
+            strat = df[stratsplit].to_numpy()
+        train_index,test_index = get_stratplit_indices(y.to_numpy(),test_size=split,random_state=random_state)
+        def split_func(Z, train_index=train_index, test_index=test_index):
+            try:
+                return Z[train_index], Z[test_index]
+            except KeyError:
+                return Z.iloc[train_index],Z.iloc[test_index]
+
     splitting = not (split is None or split==False or split==0 or split==1)
     if splitting:        #Split Train/Test
-        X_train,X_test = train_test_split(X,test_size=split,random_state=random_state)
-        if not target is None: y_train,y_test = train_test_split(y,test_size=split,random_state=random_state)
-        if not weight is None: w_train,w_test = train_test_split(w,test_size=split,random_state=random_state)
+        X_train,X_test = split_func(X)
+        if not target is None: y_train,y_test = split_func(y)
+        if not weight is None: w_train,w_test = split_func(w)
     else:                #No Train/Test
         X_train = X
         if not target is None: y_train = y
         if not weight is None: w_train = w
-    
     
     ### Pipeline ###
     if clean:
@@ -123,7 +140,6 @@ def load_transform_split(fpath='data/ALL_YEARS_ADDED_FEATURES.csv',
         if splitting: X_test = pipeline_util(X_test, pipeline=pipeline,fmt=fmt)
     else:
         pipeline = None
-    
     
     ### Format of Output ###
     def correct_format(Z,fmt):
@@ -201,6 +217,64 @@ def expand_table(df,target=None,nrows='all',progress=True):
         
     print((time.time()-t),'seconds')
     return new_df
+
+def train_test_stratsplit(strat,*args,**kwargs):
+    '''
+    Function to perform stratified train/test splitting with similar call to sklearn's train_test_split
+
+    INPUTS:
+      strat    - List to use for stratified splitting. If continuous, this list will
+                 be broken into nstrat classes with equal numbers of points per class.
+
+      *args    - Things to split. X,y,etc.
+
+      **kwargs - Options for get_stratsplit_indices.
+                  E.g. nstrat - Number of stratifications to use.
+                       test_size - Fraction to split off for test set.
+                       random_state
+    
+    OUTPUTS:
+      Z_train,Z_test for every Z in *args
+    '''
+    returns = []
+    train_index,test_index = get_stratplit_indices(strat,**kwargs)
+    for Z in args:
+        try:
+            Z_train = Z[train_index]
+            Z_test  = Z[test_index]
+        except KeyError:
+            Z_train = Z.iloc[train_index]
+            Z_test  = Z.iloc[test_index]
+        returns.append(Z_train)
+        returns.append(Z_test)
+    return returns
+
+def get_stratplit_indices(strat,nstrat=10,test_size=0.1,random_state=None,cat_thresh=20):
+    '''
+    Function to generate train and test indices using sklearn's StratifiedShuffleSplit
+
+    INPUTS:
+      strat     - List to use for stratified splitting. If continuous, this list will
+                   be broken into nstrat classes with equal numbers of points per class.
+      
+      nstrat    - Number of stratifications to use.
+
+      test_size - Fraction to split off for test set.
+
+      random_state - Random state number to use for repeatability.
+
+      cat_thresh - Threshold number of unique values for determining if the strat provided
+                    is numerical or categorical.
+    '''
+    nuniq = len(np.unique(strat))
+    if nuniq > cat_thresh:
+        bins = [np.percentile(strat,p) for p in np.linspace(0,100,nstrat+1)]
+        bins[0]-=1
+        bins[-1]+=1. #Make sure bins fully encompass all datapoints.
+        strat = np.digitize(strat,bins=bins)
+    split = StratifiedShuffleSplit(n_splits=1, test_size=test_size, random_state=random_state)
+    train_index, test_index = next(split.split(strat,strat))
+    return train_index, test_index
 
 def pipeline_util(X,pipeline=None,
                   clean=True,
