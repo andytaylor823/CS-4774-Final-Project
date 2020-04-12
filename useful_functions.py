@@ -39,7 +39,7 @@ def load_transform_split(fpath='data/ALL_YEARS_ADDED_FEATURES.csv',
         split      - Fraction of data to split off into testing set. If 0, 1, None, or False are given,
                       data will not be split.
         stratsplit - Column to use for stratified splitting. ## Currently not working ##
-                      If None or False if provided, stratified splitting is not performed.
+                      If None or False is provided, stratified splitting is not performed.
                       If True is provided, target variable is used to perform stratified splitting.
                       If Column name is provided, that column is used to perform stratified splitting.
         clean      - Boolean whether or not to run data through a pipeline with 
@@ -229,8 +229,8 @@ def train_test_stratsplit(strat,*args,**kwargs):
       *args    - Things to split. X,y,etc.
 
       **kwargs - Options for get_stratsplit_indices.
-                  E.g. nstrat - Number of stratifications to use.
-                       test_size - Fraction to split off for test set.
+                  E.g. nstrat       - Number of stratifications to use.
+                       test_size    - Fraction to split off for test set.
                        random_state
     
     OUTPUTS:

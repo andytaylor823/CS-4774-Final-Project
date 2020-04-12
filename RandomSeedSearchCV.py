@@ -113,43 +113,89 @@ def RandomSeedSearchCV(random_model_maker,X_train,y_train,N=50,
 ###########################  Random Model-Makers  ##############################
 ################################################################################
 
-#RandomForestRegressor random model maker.
-def randomseed_rfr_maker(seed,
-         ne_lo=20, ne_hi=200,               # (1) n_estimators
-         md_lo =3, md_hi =15, md_Pnone=0.5, # (2) max_depth
-         mss_lo=2, mss_hi=50,               # (3) min_samples_split
-         msl_lo=2, msl_hi=25,               # (4) min_samples_leaf
-         mf_lo =3, mf_hi =15, mf_Pnone=0.3, # (5) max_features
-         mid_lo=0.,mid_hi=0.4,              # (6) min_impurity_decrease
-         n_jobs=4):
+def rand_util(inp1=0,inp2=1,dist='uniform',dtype='float',P_None=0.0,override=None):
+    '''
+    Convenience function to take a randomly sampled number in a variety of ways.
+
+    INPUTS:
+      inp1,inp2 - Inputs to the random number generator. If type='uniform', low = inp1 and high = inp2.
+                                                         If type='normal', mean = inp1 and std = inp2.
+      dist  - Type of random sampling. Options: 
+               'uniform' - Draw from uniform distribution ranging from inp1 to inp2.
+               'normal'  - Draw from normal distribution with mean = inp1 and std = inp2.
+      dtype - Output type. 'int' or 'float'
+      P_None - Probability of returning None instead of a numerical value.
+      Override - If anything besides None is provided, no random sampling will take place, override will
+                 be the returned value.
+    OUTPUT:
+      x - Random variable
+    '''
+    #Check if override given.
+    if not override is None:
+        return override
+
+    #Draw to see if None will be returned.
+    is_None = np.random.uniform(0.,1.) < P_None
+    if is_None:
+        return None
     
+    #Draw value to be returned
+    if dist=='uniform':
+        if dtype=='int':
+            return np.random.randint(inp1,inp2)
+        elif dtype=='float':
+            return np.random.uniform(inp1,inp2)
+        else:
+            raise ValueError("Unrecognized dtype %s. Try one of 'int', 'float'."%(dtype))
+    elif dist=='normal':
+        if dtype=='int':
+            return int(np.round(np.random.normal(inp1,inp2)))
+        elif dtype=='float':
+            return np.random.normal(inp1,inp2)
+        else:
+            raise ValueError("Unrecognized dtype %s. Try one of 'int', 'float'."%(dtype))
+    else:
+        raise ValueError("Unrecognized distribution %s. Try one of 'uniform', 'normal'."%(dist))
+
+#RandomForestRegressor random model maker.
+def randomseed_rfr_maker(seed,**kwargs):
+    distparams = {
+         'n_estimators':None,         'ne_lo':20, 'ne_hi':200,
+         'max_depth':None,            'md_lo': 3, 'md_hi' :15, 'md_Pnone':0.5,
+         'min_samples_split':None,    'mss_lo':2, 'mss_hi':50,
+         'min_samples_leaf':None,     'msl_lo':2, 'msl_hi':25,
+         'max_features':None,         'mf_lo' :3, 'mf_hi' :15, 'mf_Pnone':0.3,
+         'min_impurity_decrease':None,'mid_lo':0.,'mid_hi':0.4,
+         'n_jobs':4}
+    distparams.update(kwargs) #Update default distribution parameters with user input.
+
     #Set random seed.
     np.random.seed(seed)
     
     # Randomly draw parameters and store in kwargs dictionary.
-    kwargs = {}
+    hyperparams = {}
     # (1) Draw n_estimators
-    kwargs['n_estimators'] = np.random.randint(ne_lo,ne_hi)
+    hyperparams['n_estimators'] =          rand_util(distparams['ne_lo'],distparams['ne_hi'],dist='uniform',dtype='int',
+                                                override=distparams['n_estimators'])
     # (2) Draw max_depth
-    if np.random.uniform() < md_Pnone:
-        kwargs['max_depth'] = None
-    else:
-        kwargs['max_depth'] = np.random.randint(md_lo,md_hi)
+    hyperparams['max_depth'] =             rand_util(distparams['md_lo'],distparams['md_hi'],dist='uniform',dtype='int',
+                                                P_None=distparams['md_Pnone'],override=distparams['max_depth'])
     # (3) Draw min_samples_split
-    kwargs['min_samples_split'] = np.random.randint(mss_lo,mss_hi)
+    hyperparams['min_samples_split'] =     rand_util(distparams['mss_lo'],distparams['mss_hi'],dist='uniform',dtype='int',
+                                                override=distparams['min_samples_split'])
     # (3) Draw min_samples_leaf
-    kwargs['min_samples_leaf'] = np.random.randint(msl_lo,msl_hi)
-    # (5) Draw max_features
-    if np.random.uniform() < mf_Pnone:
-        kwargs['max_features'] = None
-    else:
-        kwargs['max_features'] = np.random.randint(mf_lo,mf_hi)
-    # (6) Draw min_impurity_decrease
-    kwargs['min_impurity_decrease'] = np.random.uniform(mid_lo,mid_hi)
+    hyperparams['min_samples_leaf'] =      rand_util(distparams['msl_lo'],distparams['msl_hi'],dist='uniform',dtype='int',
+                                                override=distparams['min_samples_leaf'])
+    # (4) Draw max_features
+    hyperparams['max_features'] =          rand_util(distparams['mf_lo'],distparams['mf_hi'],dist='uniform',dtype='int',
+                                                P_None=distparams['mf_Pnone'],override=distparams['max_features'])
+    # (5) Draw min_impurity_decrease
+    hyperparams['min_impurity_decrease'] = rand_util(distparams['mid_lo'],distparams['mid_hi'],dist='uniform',dtype='float',
+                                                override=distparams['min_samples_leaf'])
     #Set n_jobs
-    kwargs['n_jobs'] = n_jobs
+    hyperparams['n_jobs'] = distparams['n_jobs']
     
     #Create the model!
-    model = RandomForestRegressor(**kwargs)
+    model = RandomForestRegressor(**hyperparams)
     
     return model
