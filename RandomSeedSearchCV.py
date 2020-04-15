@@ -5,6 +5,9 @@ from time import time
 from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.ensemble import RandomForestRegressor
 
+import tensorflow as tf
+from tensorflow import keras
+
 from useful_functions import simple_progress, preserve_state, get_metric
 
 def RandomSeedSearchCV(random_model_maker,X_train,y_train,N=50,
@@ -75,7 +78,7 @@ def RandomSeedSearchCV(random_model_maker,X_train,y_train,N=50,
     seeds = np.random.choice(10*N,N,replace=False)
     
     #Create empty lists to store model performance measures.
-    cv_scores = np.array([])
+    if cv > 1 :cv_scores = np.array([])
     train_metric = np.array([])
     valid_metric = np.array([])
     times = np.array([])
@@ -84,8 +87,9 @@ def RandomSeedSearchCV(random_model_maker,X_train,y_train,N=50,
     for i,seed in enumerate(seeds):
         if verbose: progress.update("%d/%d: Seed = %d"%(i+1,N,seed))
         model = modmkr(seed,**model_maker_kwargs)
-        cv_score = np.mean(cross_val_score(model,Xtra,ytra,scoring=metric,cv=cv))
-        cv_scores = np.append(cv_scores,cv_score)
+        if cv > 1:
+            cv_score = np.mean(cross_val_score(model,Xtra,ytra,scoring=metric,cv=cv))
+            cv_scores = np.append(cv_scores,cv_score)
         
         start_time = time()
         model.fit(Xtra,ytra)
@@ -106,8 +110,12 @@ def RandomSeedSearchCV(random_model_maker,X_train,y_train,N=50,
         ax.set_ylim(mi,ma)
         ax.plot([mi,ma],[mi,ma],ls='--',color='black')
     
-    sort = np.argsort(cv_scores)
-    return np.c_[seeds[sort],cv_scores[sort],train_metric[sort],valid_metric[sort],times[sort]]
+    if cv > 1: 
+        sort = np.argsort(cv_scores)
+        return np.c_[seeds[sort],cv_scores[sort],train_metric[sort],valid_metric[sort],times[sort]]
+    else:
+        sort = np.argsort(valid_metric)
+        return np.c_[seeds[sort],train_metric[sort],valid_metric[sort],times[sort]]
 
 ################################################################################
 ###########################  Random Model-Makers  ##############################
@@ -198,4 +206,53 @@ def randomseed_rfr_maker(seed,**kwargs):
     #Create the model!
     model = RandomForestRegressor(**hyperparams)
     
+    return model
+
+#Example Neural Net random model maker.
+def randomseed_ann_maker(seed,input_shape,output_shape,output_activation,loss,optimizer,**kwargs):
+    uberhyperparams = {
+         'n_hidden':None,             'nl_lo':1, 'nl_hi':20,  #Number of layers
+         'nnpl_lo':2,                  'nnpl_hi':20,          #Number of nodes per layer
+         'activation':None,           'activation_opts':['sigmoid','tanh','relu','selu'],
+         'global_activation':None,    'P_global_activation':0.5,
+         'initializer':None,          'initializer_opts':['he_normal','he_uniform']}
+    uberhyperparams.update(kwargs) #Update defaults with user input.
+    uhp = uberhyperparams #abbreviate for sanity.
+
+    #Set random seed.
+    np.random.seed(seed)
+
+    hp = {} #Harry Potter. Jk, it's hyperparams
+
+    hp['n_hidden'] = rand_util(uhp['nl_lo'],uhp['nl_hi'],dist='uniform',dtype='int',
+                               override=uhp['n_hidden'])
+
+    if uhp['global_activation'] is None:
+        uhp['global_activation'] = np.random.uniform() < uhp['P_global_activation']
+    
+    if uhp['global_activation']:
+        activation = np.random.choice(uhp['activation_opts'])
+    
+    if uhp['initializer'] is None:
+        hp['initializer'] = np.random.choice(uhp['initializer_opts'])
+    else:
+        hp['initializer'] = uhp['initializer']
+
+    
+    model = keras.models.Sequential()
+    inp_layer=True
+    for n in range(hp['n_hidden']):
+        if not uhp['global_activation']:
+            activation = np.random.choice(uhp['activation_opts'])
+        n_nodes = rand_util(uhp['nnpl_lo'],uhp['nnpl_hi'],dist='uniform',dtype='int')
+        if inp_layer:
+            model.add(keras.layers.Dense(n_nodes,activation=activation,
+                                         input_shape=input_shape,kernel_initializer=hp['initializer']))
+            inp_layer=False
+        else:
+            model.add(keras.layers.Dense(n_nodes,activation=activation))
+    model.add(keras.layers.Dense(output_shape,activation=output_activation))
+
+    model.compile(loss=loss,optimizer=optimizer)
+        
     return model
