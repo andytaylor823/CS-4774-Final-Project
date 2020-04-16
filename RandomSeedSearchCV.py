@@ -10,10 +10,10 @@ from tensorflow import keras
 
 from useful_functions import simple_progress, preserve_state, get_metric
 
-def RandomSeedSearchCV(random_model_maker,X_train,y_train,N=50,
+def RandomSeedSearchCV(random_model_maker,X_train,y_train,w_train=None,N=50,
                         validation=0.1,cv=5,scoring='mean_squared_error',
                         plot_summary=True,shield_seed=True,verbose=True,
-                        random_state=None,**model_maker_kwargs):
+                        random_state=None,custom_fit=None,fit_params=None,**model_maker_kwargs):
     '''
              CAUTION: This function and many of its dependencies are in active development.
     
@@ -58,6 +58,11 @@ def RandomSeedSearchCV(random_model_maker,X_train,y_train,N=50,
     else:
         modmkr = random_model_maker
     
+    use_custom_fit = not custom_fit is None
+
+    if fit_params is None:
+        fit_params = {}
+    
     #Get metric callable from sklearn. L8r I'm gonna make it
     # so the user can provide a callable metric themselves, because I
     # don't like that sklearn uses negative mse instead of positive. It drives me bonkers.
@@ -68,11 +73,21 @@ def RandomSeedSearchCV(random_model_maker,X_train,y_train,N=50,
         use_val = False
         Xtra,ytra = X_train,y_train
         Xval,yval = None,None
+        if not w_train is None:
+            wtra = w_train
+            wval = None
+            fit_params.update({'sample_weight':wtra})
     else:
         use_val = True
-        Xtra,Xval,ytra,yval = train_test_split(X_train,y_train,
-                                               test_size=validation,
-                                               random_state=random_state)
+        if w_train is None:
+            Xtra,Xval,ytra,yval = train_test_split(X_train,y_train,
+                                                   test_size=validation,
+                                                   random_state=random_state)
+        else:
+            Xtra,Xval,ytra,yval,wtra,wval = train_test_split(X_train,y_train,w_train,
+                                                             test_size=validation,
+                                                             random_state=random_state)
+            fit_params.update({'sample_weight':wtra})
     
     #Draw random seeds to use for model generation.
     seeds = np.random.choice(10*N,N,replace=False)
@@ -88,11 +103,14 @@ def RandomSeedSearchCV(random_model_maker,X_train,y_train,N=50,
         if verbose: progress.update("%d/%d: Seed = %d"%(i+1,N,seed))
         model = modmkr(seed,**model_maker_kwargs)
         if cv > 1:
-            cv_score = np.mean(cross_val_score(model,Xtra,ytra,scoring=metric,cv=cv))
+            cv_score = np.mean(cross_val_score(model,Xtra,ytra,scoring=metric,cv=cv,fit_params=fit_params))
             cv_scores = np.append(cv_scores,cv_score)
         
         start_time = time()
-        model.fit(Xtra,ytra)
+        if use_custom_fit:
+            model = custom_fit(model,Xtra,ytra,**fit_params)
+        else:
+            model.fit(Xtra,ytra,**fit_params)
         train_metric = np.append(train_metric, metric(model,Xtra,ytra))
         if use_val: valid_metric = np.append(valid_metric, metric(model,Xval,yval))
         times = np.append(times, time()-start_time)
@@ -212,7 +230,8 @@ def randomseed_rfr_maker(seed,**kwargs):
 def randomseed_ann_maker(seed,input_shape,output_shape,output_activation,loss,optimizer,**kwargs):
     uberhyperparams = {
          'n_hidden':None,             'nl_lo':1, 'nl_hi':20,  #Number of layers
-         'nnpl_lo':2,                  'nnpl_hi':20,          #Number of nodes per layer
+         'nnpl_lo':2,                 'nnpl_hi':20,          #Number of nodes per layer
+         'cone':None,                 'P_cone':0.8,
          'activation':None,           'activation_opts':['sigmoid','tanh','relu','selu'],
          'global_activation':None,    'P_global_activation':0.5,
          'initializer':None,          'initializer_opts':['he_normal','he_uniform']}

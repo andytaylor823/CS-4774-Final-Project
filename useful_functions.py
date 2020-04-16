@@ -5,6 +5,7 @@ import time
 
 import tensorflow as tf
 from tensorflow import keras
+from tensorflow.keras import backend as K
 
 from sklearn.model_selection import train_test_split, StratifiedShuffleSplit
 from sklearn.metrics import get_scorer
@@ -573,3 +574,10 @@ class simple_progress:
         if len(message) > self.longest:  #Update longest message length.
             self.longest = len(message)
 
+def ann_fit(model,X_train,y_train,epochs=1,bail_init_loss=None,**fit_kwargs):
+    history = model.fit(X_train,y_train,epochs=1,**fit_kwargs)
+    if history.history['loss'][0] > bail_init_loss:
+        return model
+    model.fit(X_train,y_train,epochs=epochs-1,**fit_kwargs)
+    return model
+    
