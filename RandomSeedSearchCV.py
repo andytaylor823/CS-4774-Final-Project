@@ -234,7 +234,7 @@ def randomseed_ann_maker(seed,input_shape,output_shape,output_activation,loss,op
          'cone':None,                 'P_cone':0.8,
          'activation':None,           'activation_opts':['sigmoid','tanh','relu','selu'],
          'global_activation':None,    'P_global_activation':0.5,
-         'initializer':None,          'initializer_opts':['he_normal','he_uniform']}
+         'initializer':None,          'initializer_opts':['he_normal','he_uniform','glorot_normal','glorot_uniform']}
     uberhyperparams.update(kwargs) #Update defaults with user input.
     uhp = uberhyperparams #abbreviate for sanity.
 
@@ -245,6 +245,9 @@ def randomseed_ann_maker(seed,input_shape,output_shape,output_activation,loss,op
 
     hp['n_hidden'] = rand_util(uhp['nl_lo'],uhp['nl_hi'],dist='uniform',dtype='int',
                                override=uhp['n_hidden'])
+
+    if uhp['cone'] is None:
+        uhp['cone'] = np.random.uniform() < uhp['P_cone']
 
     if uhp['global_activation'] is None:
         uhp['global_activation'] = np.random.uniform() < uhp['P_global_activation']
@@ -260,10 +263,19 @@ def randomseed_ann_maker(seed,input_shape,output_shape,output_activation,loss,op
     
     model = keras.models.Sequential()
     inp_layer=True
+    n_nodes = uhp['nnpl_hi'] 
     for n in range(hp['n_hidden']):
+        #Determine number of nodes for this layer.
+        if uhp['cone']:
+            nnpl_hi = n_nodes
+            nnpl_lo = np.max([nnpl_hi - int(np.ceil((n_nodes-uhp['nnpl_lo'])/(hp['n_hidden']-n))) , uhp['nnpl_lo']])
+            n_nodes = rand_util(nnpl_lo,nnpl_hi+1,dist='uniform',dtype='int')
+        else:
+            n_nodes = rand_util(uhp['nnpl_lo'],uhp['nnpl_hi']+1,dist='uniform',dtype='int')
+
+        #Determine activation function for this layer.
         if not uhp['global_activation']:
             activation = np.random.choice(uhp['activation_opts'])
-        n_nodes = rand_util(uhp['nnpl_lo'],uhp['nnpl_hi'],dist='uniform',dtype='int')
         if inp_layer:
             model.add(keras.layers.Dense(n_nodes,activation=activation,
                                          input_shape=input_shape,kernel_initializer=hp['initializer']))
