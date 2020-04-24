@@ -383,6 +383,132 @@ def make_pipeline(X,cat_thresh=10):
     
     return pipeline
 
+################################################################################
+############################  Model Evaluation  ################################
+################################################################################
+
+def evaluate_model(model,pipeline,**kwargs):
+    features = {'GENDER':                  'M',
+                'FEDERAL_RACE_CODE':        3,
+                'DISABILITY_FLAG':         'N',
+                'DISADVANTAGED_FLAG':      'N',
+                'LEP_FLAG':                'N',
+                'COHORT_CNT':              100,
+                'per_capita_income':       35000,
+                'median_household_income': 68000,
+                'median_family_income':    88000,
+                'StudentNumber':           2000,
+                'STRatio':                 10,
+                'MathProficiency':         80,
+                'ReadingProficiency':      80,}
+    features.update(kwargs)
+    feat_names = ['GENDER', 'FEDERAL_RACE_CODE', 'DISABILITY_FLAG', 'DISADVANTAGED_FLAG',
+       'LEP_FLAG', 'COHORT_CNT', 'per_capita_income',
+       'median_household_income', 'median_family_income', 'StudentNumber',
+       'STRatio', 'MathProficiency', 'ReadingProficiency']
+    
+    df = pd.DataFrame()
+    npts = 1
+    for feat in feat_names:
+        try:
+            if len(features[feat]) > npts:
+                npts = len(features[feat])
+        except TypeError:
+            pass
+    #print(npts)
+    for feat in feat_names:
+        try:
+            feat_arr = np.array(features[feat])
+            if len(feat_arr) > npts:
+                feat_arr = np.append(feat_arr,(npts-feat_arr.shape[0])*[feat_arr[-1]])
+            df[feat] = feat_arr
+        except TypeError:
+            df[feat] = npts*[features[feat]]
+    #print(df)
+    cleaned = pipeline.transform(df)
+
+    df['DROPOUT_N'] = model.predict(cleaned)
+    return df
+
+def get_trend(model,pipeline,feat,lo,hi,npts=100,**kwargs):
+    feat_arr = np.linspace(lo,hi,npts)
+    feats = dict(kwargs)
+    feats.update({feat:feat_arr})
+    df = evaluate_model(model,pipeline,**feats)
+    return feat_arr,np.array(df['DROPOUT_N'])
+
+def preserve_state(func):
+    # Decorator to prevent a function from affecting 
+    #  the numpy random seed outside of its scope.
+    def wrapper(*args,**kwargs):
+        state = np.random.get_state() #Store the random state before function call.
+        ret = func(*args,**kwargs)    #Call function.
+        np.random.set_state(state)    #Revert numpy to random state from before function call.
+        return ret
+    return wrapper
+    
+@preserve_state
+def get_averaged_trend(model,pipeline,feat,lo,hi,npts=100,nsamples=100,seed=None,**kwargs):
+    if not seed is None:
+        np.random.seed(seed)
+    X,_ = load_transform_split(target=None,clean=False,fmt='pandas')
+    samples_i = np.random.choice(X.shape[0],size=nsamples,replace=False)
+    drop_arrs = []
+    for i in samples_i:
+        feats = {k:np.array(X[k])[i] for k in X.columns}
+        feats.update(kwargs)
+        feat_arr,drop_arr = get_trend(model,pipeline,feat,lo,hi,npts,**feats)
+        drop_arrs.append(drop_arr)
+    drop_arrs = np.array(drop_arrs)
+    return feat_arr,np.mean(drop_arrs,axis=0)
+
+def get_cohort_trends(model,pipeline,feat,lo,hi,npts=100,cohort_arr='default',y='DROPOUT_N',**kwargs):
+    if cohort_arr == 'default':
+        cohort_arr = np.array([1,5,10,20,50,100,150,200])
+    
+    drop_arrs = []
+    for cohort_size in cohort_arr:
+        feat_arr,drop_arr = get_trend(model,pipeline,feat,lo,hi,npts,COHORT_CNT=cohort_size,**kwargs)
+        if y == 'DROPOUT_RATE':
+            drop_arr /= cohort_size
+        drop_arrs.append(drop_arr)
+    drop_arrs = np.array(drop_arrs)
+    return feat_arr,drop_arrs
+    
+
+def plot_thing_better_name_l8r(model,pipeline,feat,lo,hi,npts=100,cohort_arr='default',cohort_disp="cmap",
+                               cmap="inferno",cax=None,y="DROPOUT_N",ax=None,plot_kwargs=None,**kwargs):
+    if ax is None:
+        fig,ax = plt.subplots()
+        ax.set_xlabel(feat)
+        ax.set_ylabel(y)
+    if plot_kwargs is None:
+        plot_kwargs = {}
+
+    if cohort_arr == 'default':
+        cohort_arr = np.array([1,5,10,20,50,100,150,200])
+
+    feat_arr,drop_arrs = get_cohort_trends(model,pipeline,feat,lo,hi,npts,cohort_arr,**kwargs)
+    print(drop_arrs.shape)
+
+    if cohort_disp == 'mean':
+        drop_mean = np.mean(drop_arrs,axis=0)
+        ax.plot(feat_arr,drop_mean,**plot_kwargs)
+    elif cohort_disp == 'range':
+        drop_mean = np.mean(drop_arrs,axis=0)
+        drop_min = np.min(drop_arrs,axis=0)
+        drop_max = np.max(drop_arrs,axis=0)
+        ax.fill_between(feat_arr,drop_min,drop_max,**plot_kwargs)
+        ax.plot(feat_arr,drop_mean,**plot_kwargs)
+    if cohort_disp=='cmap':
+        cm = plt.get_cmap(cmap)
+        for cohort_size in cohort_arr:
+            color = cm((np.log10(cohort_size) - np.log10(min(cohort_arr)))/(np.log10(max(cohort_arr)) - np.log10(min(cohort_arr))))
+            ax.plot(feat_arr,drop_arr,color=color,label='Size = %d'%(cohort_size))
+
+    ax.legend()
+
+    return ax
 
 ################################################################################
 ###########################  Plotting Functions  ###############################
@@ -554,16 +680,6 @@ def get_metric(scoring):
             except KeyError:
                 raise ValueError("Unrecognized sklearn metric")
     return metric
-
-def preserve_state(func):
-    # Decorator to prevent a function from affecting 
-    #  the numpy random seed outside of its scope.
-    def wrapper(*args,**kwargs):
-        state = np.random.get_state() #Store the random state before function call.
-        ret = func(*args,**kwargs)    #Call function.
-        np.random.set_state(state)    #Revert numpy to random state from before function call.
-        return ret
-    return wrapper
 
 class simple_progress:
     def __init__(self):

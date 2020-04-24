@@ -11,7 +11,7 @@ from tensorflow import keras
 from useful_functions import simple_progress, preserve_state, get_metric
 
 def RandomSeedSearchCV(random_model_maker,X_train,y_train,w_train=None,N=50,
-                        validation=0.1,cv=5,scoring='mean_squared_error',
+                        validation=0.1,cv=5,scoring='mean_squared_error',metric=None,metric_needs_weights=False,
                         plot_summary=True,shield_seed=True,verbose=True,
                         random_state=None,custom_fit=None,fit_params=None,**model_maker_kwargs):
     '''
@@ -66,7 +66,8 @@ def RandomSeedSearchCV(random_model_maker,X_train,y_train,w_train=None,N=50,
     #Get metric callable from sklearn. L8r I'm gonna make it
     # so the user can provide a callable metric themselves, because I
     # don't like that sklearn uses negative mse instead of positive. It drives me bonkers.
-    metric = get_metric(scoring)
+    if metric is None:
+        metric = get_metric(scoring)
     
     #Split validation set out of the training set, if 
     if validation is None or validation==False or validation>=1 or validation <=0:
@@ -89,6 +90,11 @@ def RandomSeedSearchCV(random_model_maker,X_train,y_train,w_train=None,N=50,
                                                              random_state=random_state)
             fit_params.update({'sample_weight':wtra})
     
+    if not w_train is None and metric_needs_weights:
+        metric = lambda model,X,y,w=wtra,old_metric=metric:old_metric(model,X,y,w)
+    else:
+        metric_needs_weights = False
+
     #Draw random seeds to use for model generation.
     seeds = np.random.choice(10*N,N,replace=False)
     
@@ -112,7 +118,11 @@ def RandomSeedSearchCV(random_model_maker,X_train,y_train,w_train=None,N=50,
         else:
             model.fit(Xtra,ytra,**fit_params)
         train_metric = np.append(train_metric, metric(model,Xtra,ytra))
-        if use_val: valid_metric = np.append(valid_metric, metric(model,Xval,yval))
+        if use_val:
+            if metric_needs_weights:
+                valid_metric = np.append(valid_metric, metric(model,Xval,yval,wval))
+            else:
+                valid_metric = np.append(valid_metric, metric(model,Xval,yval))
         times = np.append(times, time()-start_time)
 
     #Plot a summary when done.
@@ -229,9 +239,9 @@ def randomseed_rfr_maker(seed,**kwargs):
 #Example Neural Net random model maker.
 def randomseed_ann_maker(seed,input_shape,output_shape,output_activation,loss,optimizer,**kwargs):
     uberhyperparams = {
-         'n_hidden':None,             'nl_lo':1, 'nl_hi':20,  #Number of layers
+         'n_hidden':None,             'nl_lo':1, 'nl_hi':50,  #Number of layers
          'nnpl_lo':2,                 'nnpl_hi':20,          #Number of nodes per layer
-         'cone':None,                 'P_cone':0.8,
+         'cone':None,                 'P_cone':0.5,
          'activation':None,           'activation_opts':['sigmoid','tanh','relu','selu'],
          'global_activation':None,    'P_global_activation':0.5,
          'initializer':None,          'initializer_opts':['he_normal','he_uniform','glorot_normal','glorot_uniform']}
@@ -281,8 +291,8 @@ def randomseed_ann_maker(seed,input_shape,output_shape,output_activation,loss,op
                                          input_shape=input_shape,kernel_initializer=hp['initializer']))
             inp_layer=False
         else:
-            model.add(keras.layers.Dense(n_nodes,activation=activation))
-    model.add(keras.layers.Dense(output_shape,activation=output_activation))
+            model.add(keras.layers.Dense(n_nodes,activation=activation,kernel_initializer=hp['initializer']))
+    model.add(keras.layers.Dense(output_shape,activation=output_activation,kernel_initializer=hp['initializer']))
 
     model.compile(loss=loss,optimizer=optimizer)
         
